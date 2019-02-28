@@ -30,7 +30,6 @@ import static edu.cmu.pocketsphinx.SpeechRecognizerSetup.defaultSetup;
 public class MainActivity extends Activity implements RecognitionListener
 {
 	private static final int PERMISSIONS_REQUEST_RECORD_AUDIO = 1;
-
 	private SpeechRecognizer recognizer;
 	private String NGRAM_SEARCH = "salut";
 	private boolean enEcoute = false;
