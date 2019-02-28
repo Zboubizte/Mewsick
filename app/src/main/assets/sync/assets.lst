@@ -1,0 +1,12 @@
+fr-phone.lm.dmp
+fr-small.lm.bin
+fr.dict
+ptm/README
+ptm/feat.params
+ptm/mdef
+ptm/means
+ptm/mixture_weights
+ptm/noisedict
+ptm/sendump
+ptm/transition_matrices
+ptm/variances
