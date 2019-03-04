@@ -2,10 +2,12 @@ package com.example.mewsick;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.media.AudioManager;
 import android.media.Image;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
@@ -42,8 +44,11 @@ public class MainActivity extends Activity implements RecognitionListener
 	private SpeechRecognizer recognizer;
 	private String NGRAM_SEARCH = "salut";
 	private boolean enEcoute = false;
+	private boolean paused = false;
 
 	private Handler durationHandler = new Handler();
+
+	AudioManager audioManager = (AudioManager) getApplicationContext().getSystemService(Context.AUDIO_SERVICE);
 
 	TextView artisteAlbum;
 	TextView morceau;
@@ -55,10 +60,12 @@ public class MainActivity extends Activity implements RecognitionListener
 
 	Bitmap image;
 	String titre, artiste, album;
-	float duree, dureePassee;
+	int duree, dureePassee;
 
-	MediaPlayer mp;
+	MediaPlayer mp = null;
 	MediaMetadataRetriever mmr = null;
+
+	int morceauActuel;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState)
@@ -66,22 +73,13 @@ public class MainActivity extends Activity implements RecognitionListener
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
 
+		morceauActuel = R.raw.strawberry_girls_betelgeuse;
+
 		checkPermissions();
 		linkUI();
-		loadSong(R.raw.strawberry_girls_betelgeuse);
+		initMedia();
+		loadSong(morceauActuel);
 		blurBG();
-
-		albumArt.setOnClickListener(new View.OnClickListener()
-		{
-			@Override
-			public void onClick(View v)
-			{
-				if (mp.isPlaying())
-					pause();
-				else
-					jouer();
-			}
-		});
 
 		enregistrer.setOnClickListener(new View.OnClickListener()
 		{
@@ -102,7 +100,7 @@ public class MainActivity extends Activity implements RecognitionListener
 	{
 		BlurImage.with(getApplicationContext())
 				.load(image)
-				.intensity(50)
+				.intensity(20)
 				.Async(true)
 				.into((ImageView) findViewById(R.id.backgroundImg));
 	}
@@ -112,10 +110,7 @@ public class MainActivity extends Activity implements RecognitionListener
 		int permissionCheck = ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.RECORD_AUDIO);
 
 		if (permissionCheck != PackageManager.PERMISSION_GRANTED)
-		{
 			ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO}, PERMISSIONS_REQUEST_RECORD_AUDIO);
-			return;
-		}
 	}
 
 	private void linkUI()
@@ -129,25 +124,33 @@ public class MainActivity extends Activity implements RecognitionListener
 		progress = findViewById(R.id.progress);
 	}
 
+	private void initMedia()
+	{
+		mmr = new MediaMetadataRetriever();
+	}
+
 	private void loadSong(int fichier)
 	{
-		mp = MediaPlayer.create(this, fichier);
-		mmr = new MediaMetadataRetriever();
+		if (mp != null)
+			mp.reset();
 
 		final AssetFileDescriptor afd = getResources().openRawResourceFd(fichier);
-		mmr.setDataSource(afd.getFileDescriptor(),afd.getStartOffset(),afd.getLength());
+
+		mp = MediaPlayer.create(this, fichier);
+		mmr.setDataSource(afd.getFileDescriptor(), afd.getStartOffset(), afd.getLength());
 
 		titre = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);
 		artiste = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST).toUpperCase();
 		album = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM).toUpperCase();
+		duree = mp.getDuration();
 
 		byte[] data = mmr.getEmbeddedPicture();
 		image = BitmapFactory.decodeByteArray(data, 0, data.length);
 
-		artisteAlbum.setText(artiste + " - " + album);
+		artisteAlbum.setText(String.format("%s - %s", artiste, album));
 		morceau.setText(titre);
 		albumArt.setImageBitmap(image);
-		tempsTotal.setText(String.format("%02d:%02d", (mp.getDuration() / 1000) / 60, (mp.getDuration() / 1000) % 60));
+		tempsTotal.setText(String.format("%01d:%02d", (mp.getDuration() / 1000) / 60, (mp.getDuration() / 1000) % 60));
 
 		progress.setMax(mp.getDuration());
 		progress.setClickable(false);
@@ -156,8 +159,36 @@ public class MainActivity extends Activity implements RecognitionListener
 	private void jouer()
 	{
 		mp.start();
-		progress.setProgress((int) mp.getCurrentPosition());
+		progress.setProgress(mp.getCurrentPosition());
 		durationHandler.postDelayed(updateSeekBarTime, 100);
+	}
+
+	private void pause()
+	{
+		mp.pause();
+	}
+
+	private void next()
+	{
+		if (morceauActuel == R.raw.strawberry_girls_betelgeuse)
+			morceauActuel = R.raw.queen_dont_stop_me_now;
+		else
+			morceauActuel = R.raw.strawberry_girls_betelgeuse;
+
+		loadSong(morceauActuel);
+		blurBG();
+	}
+
+	private void monterVolume()
+	{
+		audioManager.adjustVolume(AudioManager.ADJUST_RAISE, AudioManager.FLAG_PLAY_SOUND);
+		audioManager.adjustVolume(AudioManager.ADJUST_RAISE, AudioManager.FLAG_PLAY_SOUND);
+	}
+
+	private void baisserVolume()
+	{
+		audioManager.adjustVolume(AudioManager.ADJUST_LOWER, AudioManager.FLAG_PLAY_SOUND);
+		audioManager.adjustVolume(AudioManager.ADJUST_LOWER, AudioManager.FLAG_PLAY_SOUND);
 	}
 
 	private Runnable updateSeekBarTime = new Runnable()
@@ -165,18 +196,12 @@ public class MainActivity extends Activity implements RecognitionListener
 		public void run()
 		{
 			dureePassee = mp.getCurrentPosition();
-			progress.setProgress((int) dureePassee);
-			double timeRemaining = duree - dureePassee;
-			tempsActuel.setText(String.format("%02d:%02d", TimeUnit.MILLISECONDS.toMinutes((long) timeRemaining), TimeUnit.MILLISECONDS.toSeconds((long) timeRemaining) - TimeUnit.MINUTES.toSeconds(TimeUnit.MILLISECONDS.toMinutes((long) timeRemaining))));
+			progress.setProgress(dureePassee);
+			tempsActuel.setText(String.format("%01d:%02d", (mp.getCurrentPosition() / 1000) / 60, (mp.getCurrentPosition() / 1000) % 60));
 
 			durationHandler.postDelayed(this, 100);
 		}
 	};
-
-	private void pause()
-	{
-		mp.pause();
-	}
 
 	private static class SetupTask extends AsyncTask<Void, Void, Exception>
 	{
@@ -218,7 +243,13 @@ public class MainActivity extends Activity implements RecognitionListener
 	{
 		recognizer = defaultSetup()
 					.setAcousticModel(new File(assetDir, "ptm"))
-					.setDictionary(new File(assetDir, "fr.dict"))
+					.setDictionary(new File(assetDir, "customdict.dict"))
+					.setBoolean("-allphone_ci", true)
+					.setFloat("-lw", 2.0)
+					.setFloat("-beam", 1e-20)
+					.setFloat("-pbeam", 1e-20)
+					.setFloat("-vad_threshold", 3.0)
+					.setBoolean("-remove_noise", true)
 					.getRecognizer();
 
 		recognizer.addListener(this);
@@ -228,7 +259,12 @@ public class MainActivity extends Activity implements RecognitionListener
 
 	private void ecouter()
 	{
-		System.out.println("J'ECOUTE");
+		if (mp.isPlaying())
+		{
+			pause();
+			paused = true;
+		}
+
 		enregistrer.setAlpha(0.2f);
 		enEcoute = true;
 		recognizer.startListening(NGRAM_SEARCH, 1500);
@@ -236,7 +272,6 @@ public class MainActivity extends Activity implements RecognitionListener
 
 	private void stop()
 	{
-		System.out.println("FIN");
 		enregistrer.setAlpha(1f);
 		enEcoute = false;
 		recognizer.stop();
@@ -262,14 +297,52 @@ public class MainActivity extends Activity implements RecognitionListener
 	@Override public void onTimeout()
 	{
 		stop();
+
+		if (paused)
+		{
+			jouer();
+			paused = false;
+		}
 	}
 
 	@Override public void onResult(Hypothesis hypothesis)
 	{
 		if (hypothesis != null)
 		{
-			System.out.println(hypothesis.getHypstr());
-			((TextView) findViewById(R.id.commande)).setText(hypothesis.getHypstr());
+			String commande = hypothesis.getHypstr();
+			((TextView) findViewById(R.id.commande)).setText(commande);
+
+			if (commande.contains("pause") || commande.contains("stop"))
+				((TextView) findViewById(R.id.commande)).setText("PAUSE");
+			else if (commande.contains("jouer") || commande.contains("reprendre") || commande.contains("joué"))
+			{
+				jouer();
+				((TextView) findViewById(R.id.commande)).setText("JOUER");
+			}
+			else if (commande.contains("chanson suivante") || commande.contains("morceau suivant"))
+			{
+				next();
+				jouer();
+				((TextView) findViewById(R.id.commande)).setText("SUIVANT");
+			}
+			else if (commande.contains("le volume") || commande.contains("le son"))
+			{
+				if (commande.contains("monter"))
+					monterVolume();
+				else if (commande.contains("baisser"))
+					baisserVolume();
+
+				if (paused)
+					jouer();
+			}
+			else
+			{
+				if (paused)
+					jouer();
+				((TextView) findViewById(R.id.commande)).setText("TIMEOUT");
+			}
+
+			paused = false;
 		}
 	}
 }
