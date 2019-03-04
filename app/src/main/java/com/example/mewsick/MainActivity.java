@@ -8,10 +8,8 @@ import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.AudioManager;
-import android.media.Image;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
-import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
@@ -28,8 +26,6 @@ import com.jackandphantom.blurimage.BlurImage;
 import java.io.File;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
-import java.util.ArrayList;
-import java.util.concurrent.TimeUnit;
 
 import edu.cmu.pocketsphinx.Assets;
 import edu.cmu.pocketsphinx.Hypothesis;
@@ -43,29 +39,20 @@ public class MainActivity extends Activity implements RecognitionListener
 	private static final int PERMISSIONS_REQUEST_RECORD_AUDIO = 1;
 	private SpeechRecognizer recognizer;
 	private String NGRAM_SEARCH = "salut";
-	private boolean enEcoute = false;
-	private boolean paused = false;
+	private boolean enEcoute = false, paused = false;
 
-	private Handler durationHandler = new Handler();
+	private TextView artisteAlbum, morceau, tempsActuel, tempsTotal, texteCommande;
+	private ImageView albumArt, enregistrer;
+	private SeekBar progress;
 
-	AudioManager audioManager = (AudioManager) getApplicationContext().getSystemService(Context.AUDIO_SERVICE);
+	private int morceauActuel, duree, dureePassee;
+	private String titre, artiste, album;
+	private Bitmap image;
 
-	TextView artisteAlbum;
-	TextView morceau;
-	TextView tempsActuel;
-	TextView tempsTotal;
-	ImageView albumArt;
-	ImageView enregistrer;
-	SeekBar progress;
-
-	Bitmap image;
-	String titre, artiste, album;
-	int duree, dureePassee;
-
-	MediaPlayer mp = null;
-	MediaMetadataRetriever mmr = null;
-
-	int morceauActuel;
+	private AudioManager audioManager = null;
+	private MediaPlayer mp = null;
+	private MediaMetadataRetriever mmr = null;
+	private Handler durationHandler = null;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState)
@@ -74,12 +61,12 @@ public class MainActivity extends Activity implements RecognitionListener
 		setContentView(R.layout.activity_main);
 
 		morceauActuel = R.raw.strawberry_girls_betelgeuse;
+		durationHandler = new Handler();
 
-		checkPermissions();
-		linkUI();
+		verifierPermissions();
+		lierInterface();
 		initMedia();
-		loadSong(morceauActuel);
-		blurBG();
+		charger(morceauActuel);
 
 		enregistrer.setOnClickListener(new View.OnClickListener()
 		{
@@ -99,13 +86,13 @@ public class MainActivity extends Activity implements RecognitionListener
 	private void blurBG()
 	{
 		BlurImage.with(getApplicationContext())
-				.load(image)
-				.intensity(20)
-				.Async(true)
-				.into((ImageView) findViewById(R.id.backgroundImg));
+				 .load(image)
+				 .intensity(20)
+				 .Async(true)
+				 .into((ImageView) findViewById(R.id.backgroundImg));
 	}
 
-	private void checkPermissions()
+	private void verifierPermissions()
 	{
 		int permissionCheck = ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.RECORD_AUDIO);
 
@@ -113,7 +100,7 @@ public class MainActivity extends Activity implements RecognitionListener
 			ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO}, PERMISSIONS_REQUEST_RECORD_AUDIO);
 	}
 
-	private void linkUI()
+	private void lierInterface()
 	{
 		artisteAlbum = findViewById(R.id.artisteAlbum);
 		morceau = findViewById(R.id.morceau);
@@ -122,14 +109,16 @@ public class MainActivity extends Activity implements RecognitionListener
 		albumArt = findViewById(R.id.albumArt);
 		enregistrer = findViewById(R.id.enregistrer);
 		progress = findViewById(R.id.progress);
+		texteCommande = findViewById(R.id.commande);
 	}
 
 	private void initMedia()
 	{
+		audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
 		mmr = new MediaMetadataRetriever();
 	}
 
-	private void loadSong(int fichier)
+	private void charger(int fichier)
 	{
 		if (mp != null)
 			mp.reset();
@@ -154,6 +143,8 @@ public class MainActivity extends Activity implements RecognitionListener
 
 		progress.setMax(mp.getDuration());
 		progress.setClickable(false);
+
+		blurBG();
 	}
 
 	private void jouer()
@@ -175,12 +166,15 @@ public class MainActivity extends Activity implements RecognitionListener
 		else
 			morceauActuel = R.raw.strawberry_girls_betelgeuse;
 
-		loadSong(morceauActuel);
-		blurBG();
+		charger(morceauActuel);
 	}
 
 	private void monterVolume()
 	{
+		audioManager.adjustVolume(AudioManager.ADJUST_RAISE, AudioManager.FLAG_PLAY_SOUND);
+		audioManager.adjustVolume(AudioManager.ADJUST_RAISE, AudioManager.FLAG_PLAY_SOUND);
+		audioManager.adjustVolume(AudioManager.ADJUST_RAISE, AudioManager.FLAG_PLAY_SOUND);
+		audioManager.adjustVolume(AudioManager.ADJUST_RAISE, AudioManager.FLAG_PLAY_SOUND);
 		audioManager.adjustVolume(AudioManager.ADJUST_RAISE, AudioManager.FLAG_PLAY_SOUND);
 		audioManager.adjustVolume(AudioManager.ADJUST_RAISE, AudioManager.FLAG_PLAY_SOUND);
 	}
@@ -189,6 +183,18 @@ public class MainActivity extends Activity implements RecognitionListener
 	{
 		audioManager.adjustVolume(AudioManager.ADJUST_LOWER, AudioManager.FLAG_PLAY_SOUND);
 		audioManager.adjustVolume(AudioManager.ADJUST_LOWER, AudioManager.FLAG_PLAY_SOUND);
+		audioManager.adjustVolume(AudioManager.ADJUST_LOWER, AudioManager.FLAG_PLAY_SOUND);
+		audioManager.adjustVolume(AudioManager.ADJUST_LOWER, AudioManager.FLAG_PLAY_SOUND);
+		audioManager.adjustVolume(AudioManager.ADJUST_LOWER, AudioManager.FLAG_PLAY_SOUND);
+		audioManager.adjustVolume(AudioManager.ADJUST_LOWER, AudioManager.FLAG_PLAY_SOUND);
+	}
+
+	private void avancer()
+	{
+		if (mp.getCurrentPosition() + 10000 <= duree)
+			mp.seekTo(mp.getCurrentPosition() + 10000);
+		else
+			mp.seekTo(duree);
 	}
 
 	private Runnable updateSeekBarTime = new Runnable()
@@ -310,27 +316,41 @@ public class MainActivity extends Activity implements RecognitionListener
 		if (hypothesis != null)
 		{
 			String commande = hypothesis.getHypstr();
-			((TextView) findViewById(R.id.commande)).setText(commande);
 
 			if (commande.contains("pause") || commande.contains("stop"))
-				((TextView) findViewById(R.id.commande)).setText("PAUSE");
-			else if (commande.contains("jouer") || commande.contains("reprendre") || commande.contains("joué"))
+				texteCommande.setText("PAUSE");
+			else if (commande.contains("jouer") || commande.contains("reprendre"))
 			{
 				jouer();
-				((TextView) findViewById(R.id.commande)).setText("JOUER");
+				texteCommande.setText("JOUER");
 			}
-			else if (commande.contains("chanson suivante") || commande.contains("morceau suivant"))
+			else if (commande.contains("suivant"))
 			{
 				next();
 				jouer();
-				((TextView) findViewById(R.id.commande)).setText("SUIVANT");
+				texteCommande.setText("SUIVANT");
 			}
-			else if (commande.contains("le volume") || commande.contains("le son"))
+			else if (commande.contains("avancer"))
+			{
+				avancer();
+
+				if (paused)
+					jouer();
+
+				texteCommande.setText("AVANCER");
+			}
+			else if (commande.contains("volume") || commande.contains("son"))
 			{
 				if (commande.contains("monter"))
+				{
 					monterVolume();
+					texteCommande.setText("VOLUME +");
+				}
 				else if (commande.contains("baisser"))
+				{
 					baisserVolume();
+					texteCommande.setText("VOLUME +");
+				}
 
 				if (paused)
 					jouer();
@@ -339,7 +359,7 @@ public class MainActivity extends Activity implements RecognitionListener
 			{
 				if (paused)
 					jouer();
-				((TextView) findViewById(R.id.commande)).setText("TIMEOUT");
+				texteCommande.setText(commande);
 			}
 
 			paused = false;
