@@ -13,6 +13,7 @@ import android.media.MediaPlayer;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.StrictMode;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
@@ -23,9 +24,20 @@ import android.widget.TextView;
 
 import com.jackandphantom.blurimage.BlurImage;
 
+import org.json.JSONException;
+import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
+
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.lang.ref.WeakReference;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
 
 import edu.cmu.pocketsphinx.Assets;
 import edu.cmu.pocketsphinx.Hypothesis;
@@ -62,6 +74,9 @@ public class MainActivity extends Activity implements RecognitionListener
 
 		morceauActuel = R.raw.strawberry_girls_betelgeuse;
 		durationHandler = new Handler();
+
+		StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
+		StrictMode.setThreadPolicy(policy);
 
 		verifierPermissions();
 		lierInterface();
@@ -317,52 +332,127 @@ public class MainActivity extends Activity implements RecognitionListener
 		{
 			String commande = hypothesis.getHypstr();
 
-			if (commande.contains("pause") || commande.contains("stop"))
-				texteCommande.setText("PAUSE");
-			else if (commande.contains("jouer") || commande.contains("reprendre"))
+			String rep = httpPostRequest("http://10.104.27.112:8080/server.php", commande);
+
+			JSONParser parser = new JSONParser();
+			JSONObject json = null;
+
+			String aff = "";
+
+			try
 			{
-				jouer();
-				texteCommande.setText("JOUER");
+				json = (JSONObject) parser.parse(rep);
+
+				faireAction(json);
 			}
-			else if (commande.contains("suivant"))
+			catch (ParseException e)
 			{
+				e.printStackTrace();
+			}
+
+
+		}
+
+		paused = false;
+	}
+
+	/* https://stackoverflow.com/questions/38408121/how-to-send-http-post-request-from-android */
+	public static String httpPostRequest(String url, String cmd)
+	{
+		String response = "";
+		BufferedReader reader = null;
+		HttpURLConnection conn = null;
+
+		try
+		{
+			URL urlObj = new URL(url);
+
+			conn = (HttpURLConnection) urlObj.openConnection();
+			conn.setRequestMethod("POST");
+			conn.setDoOutput(true);
+			OutputStreamWriter wr = new OutputStreamWriter(conn.getOutputStream());
+
+			String data = "&" + URLEncoder.encode("cmd", "UTF-8") + "=" + URLEncoder.encode(cmd, "UTF-8");
+
+			wr.write(data);
+			wr.flush();
+
+			reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+			StringBuilder sb = new StringBuilder();
+			String line = null;
+
+			while ((line = reader.readLine()) != null)
+			{
+				sb.append(line + "\n");
+			}
+
+			response = sb.toString();
+		}
+		catch (Exception e)
+		{
+			e.printStackTrace();
+		}
+		finally
+		{
+			try
+			{
+				reader.close();
+
+				if (conn != null)
+					conn.disconnect();
+			}
+			catch (Exception ex)
+			{
+				ex.printStackTrace();
+			}
+		}
+
+		return response;
+	}
+
+	private void faireAction(JSONObject json)
+	{
+		String action = "";
+
+		if (json.get("cmd") != null)
+			action = (String) json.get("cmd");
+		switch (action)
+		{
+			case "stop":
+				break;
+
+			case "play":
+				jouer();
+				break;
+
+			case "next":
 				next();
 				jouer();
-				texteCommande.setText("SUIVANT");
-			}
-			else if (commande.contains("avancer"))
-			{
-				avancer();
+				break;
 
-				if (paused)
-					jouer();
+			case "move":
+				if ((int) json.get("arg") == 10)
+					avancer();
+				else if ((int) json.get("arg") == -10)
+					//reculer();
 
-				texteCommande.setText("AVANCER");
-			}
-			else if (commande.contains("volume") || commande.contains("son"))
-			{
-				if (commande.contains("monter"))
-				{
+					if (paused)
+						jouer();
+				break;
+
+			case "vol":
+				if ((json.get("arg")).equals("+"))
 					monterVolume();
-					texteCommande.setText("VOLUME +");
-				}
-				else if (commande.contains("baisser"))
-				{
+				else if ((json.get("arg")).equals("-"))
 					baisserVolume();
-					texteCommande.setText("VOLUME +");
-				}
 
 				if (paused)
 					jouer();
-			}
-			else
-			{
-				if (paused)
-					jouer();
-				texteCommande.setText(commande);
-			}
+				break;
 
-			paused = false;
+			case "null":
+				break;
+
 		}
 	}
 }
