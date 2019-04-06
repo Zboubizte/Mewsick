@@ -2,9 +2,7 @@ package com.example.mewsick;
 
 import android.Manifest;
 import android.app.Activity;
-import android.content.ActivityNotFoundException;
 import android.content.Context;
-import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
@@ -12,17 +10,17 @@ import android.graphics.BitmapFactory;
 import android.media.AudioManager;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.StrictMode;
-import android.speech.RecognizerIntent;
+import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.jackandphantom.blurimage.BlurImage;
 
@@ -31,17 +29,27 @@ import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
-import java.util.ArrayList;
-import java.util.Locale;
 
-public class MainActivity extends Activity
+import edu.cmu.pocketsphinx.Assets;
+import edu.cmu.pocketsphinx.Hypothesis;
+import edu.cmu.pocketsphinx.RecognitionListener;
+import edu.cmu.pocketsphinx.SpeechRecognizer;
+
+import static edu.cmu.pocketsphinx.SpeechRecognizerSetup.defaultSetup;
+
+public class PocketSphinx extends Activity implements RecognitionListener
 {
 	private static final int PERMISSIONS_REQUEST_RECORD_AUDIO = 1;
+	private SpeechRecognizer recognizer;
+	private String NGRAM_SEARCH = "salut";
 	private boolean enEcoute = false, paused = false;
 
 	private TextView artisteAlbum, morceau, tempsActuel, tempsTotal, texteCommande;
@@ -85,6 +93,17 @@ public class MainActivity extends Activity
 					stop();
 			}
 		});
+
+		new SetupTask(this).execute();
+	}
+
+	private void blurBG()
+	{
+		BlurImage.with(getApplicationContext())
+				 .load(image)
+				 .intensity(20)
+				 .Async(true)
+				 .into((ImageView) findViewById(R.id.backgroundImg));
 	}
 
 	private void verifierPermissions()
@@ -142,83 +161,6 @@ public class MainActivity extends Activity
 		blurBG();
 	}
 
-	private void blurBG()
-	{
-		BlurImage.with(getApplicationContext())
-				.load(image)
-				.intensity(20)
-				.Async(true)
-				.into((ImageView) findViewById(R.id.backgroundImg));
-	}
-
-	private void stop()
-	{
-		enregistrer.setAlpha(1f);
-		enEcoute = false;
-	}
-
-	private void ecouter()
-	{
-		if (mp.isPlaying())
-		{
-			pause();
-			paused = true;
-		}
-
-		enregistrer.setAlpha(0.2f);
-		enEcoute = true;
-
-		Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-		intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
-		intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-		intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Je vous écoute...");
-
-		try
-		{
-			startActivityForResult(intent, 666);
-		}
-		catch (ActivityNotFoundException a)
-		{
-			Toast.makeText(getApplicationContext(),"Oups il manque un truc !", Toast.LENGTH_SHORT).show();
-		}
-	}
-
-	@Override
-	protected void onActivityResult(int requestCode, int resultCode, Intent data)
-	{
-		stop();
-
-		super.onActivityResult(requestCode, resultCode, data);
-
-		if (requestCode == 666 && resultCode == RESULT_OK && null != data)
-		{
-			ArrayList<String> result = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
-
-			String commande = result.get(0);
-
-			String rep = httpPostRequest("http://192.168.0.5:8080/server.php", commande);
-
-			JSONParser parser = new JSONParser();
-			JSONObject json;
-
-			try
-			{
-				json = (JSONObject) parser.parse(rep);
-
-				faireAction(json);
-			}
-			catch (ParseException e)
-			{
-				e.printStackTrace();
-			}
-		}
-		else if (paused)
-		{
-			jouer();
-			paused = false;
-		}
-	}
-
 	private void jouer()
 	{
 		mp.start();
@@ -261,11 +203,6 @@ public class MainActivity extends Activity
 		audioManager.adjustVolume(AudioManager.ADJUST_LOWER, AudioManager.FLAG_PLAY_SOUND);
 	}
 
-	private void partyMode()
-	{
-		audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC), 0);
-	}
-
 	private void avancer()
 	{
 		if (mp.getCurrentPosition() + 10000 <= duree)
@@ -285,6 +222,138 @@ public class MainActivity extends Activity
 			durationHandler.postDelayed(this, 100);
 		}
 	};
+
+	private static class SetupTask extends AsyncTask<Void, Void, Exception>
+	{
+		WeakReference<PocketSphinx> activityReference;
+
+		SetupTask(PocketSphinx activity)
+		{
+			this.activityReference = new WeakReference<>(activity);
+		}
+
+		@Override
+		protected Exception doInBackground(Void... params)
+		{
+			try
+			{
+				Assets assets = new Assets(activityReference.get());
+				File assetDir = assets.syncAssets();
+				activityReference.get().setupRecognizer(assetDir);
+			}
+			catch (IOException e)
+			{
+				return e;
+			}
+
+			return null;
+		}
+
+		@Override
+		protected void onPostExecute(Exception result)
+		{
+			if (result != null)
+				System.out.println(result.getMessage());
+			else
+				activityReference.get().stop();
+		}
+	}
+
+	private void setupRecognizer(File assetDir) throws IOException
+	{
+		recognizer = defaultSetup()
+					.setAcousticModel(new File(assetDir, "ptm"))
+					.setDictionary(new File(assetDir, "customdict.dict"))
+					.setBoolean("-allphone_ci", true)
+					.setFloat("-lw", 2.0)
+					.setFloat("-beam", 1e-20)
+					.setFloat("-pbeam", 1e-20)
+					.setFloat("-vad_threshold", 3.0)
+					.setBoolean("-remove_noise", true)
+					.getRecognizer();
+
+		recognizer.addListener(this);
+
+		recognizer.addNgramSearch(NGRAM_SEARCH, new File(assetDir, "fr-small.lm.bin"));
+	}
+
+	private void ecouter()
+	{
+		if (mp.isPlaying())
+		{
+			pause();
+			paused = true;
+		}
+
+		enregistrer.setAlpha(0.2f);
+		enEcoute = true;
+		recognizer.startListening(NGRAM_SEARCH, 1500);
+	}
+
+	private void stop()
+	{
+		enregistrer.setAlpha(1f);
+		enEcoute = false;
+		recognizer.stop();
+	}
+
+	@Override
+	public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull  int[] grantResults)
+	{
+		super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+		if (requestCode == PERMISSIONS_REQUEST_RECORD_AUDIO)
+			if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED)
+				new SetupTask(this).execute();
+			else
+				finish();
+	}
+
+	@Override public void onBeginningOfSpeech() { }
+	@Override public void onEndOfSpeech() { }
+	@Override public void onError(Exception e) { }
+	@Override public void onPartialResult(Hypothesis hypothesis) { }
+
+	@Override public void onTimeout()
+	{
+		stop();
+
+		if (paused)
+		{
+			jouer();
+			paused = false;
+		}
+	}
+
+	@Override public void onResult(Hypothesis hypothesis)
+	{
+		if (hypothesis != null)
+		{
+			String commande = hypothesis.getHypstr();
+
+			String rep = httpPostRequest("http://10.104.27.112:8080/server.php", commande);
+
+			JSONParser parser = new JSONParser();
+			JSONObject json = null;
+
+			String aff = "";
+
+			try
+			{
+				json = (JSONObject) parser.parse(rep);
+
+				faireAction(json);
+			}
+			catch (ParseException e)
+			{
+				e.printStackTrace();
+			}
+
+
+		}
+
+		paused = false;
+	}
 
 	/* https://stackoverflow.com/questions/38408121/how-to-send-http-post-request-from-android */
 	public static String httpPostRequest(String url, String cmd)
@@ -309,11 +378,11 @@ public class MainActivity extends Activity
 
 			reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
 			StringBuilder sb = new StringBuilder();
-			String line;
+			String line = null;
 
 			while ((line = reader.readLine()) != null)
 			{
-				sb.append(line).append("\n");
+				sb.append(line + "\n");
 			}
 
 			response = sb.toString();
@@ -342,58 +411,47 @@ public class MainActivity extends Activity
 
 	private void faireAction(JSONObject json)
 	{
-		String action;
+		String action = "";
 
-		if ((action = (String) json.get("cmd")) != null)
+		if (json.get("cmd") != null)
+			action = (String) json.get("cmd");
+		switch (action)
 		{
-			switch (action)
-			{
-				case "stop":
-					break;
+			case "stop":
+				break;
 
-				case "play":
-					jouer();
-					break;
+			case "play":
+				jouer();
+				break;
 
-				case "next":
-					next();
-					jouer();
-					break;
+			case "next":
+				next();
+				jouer();
+				break;
 
-				case "move":
-					if ((int) json.get("arg") == 10)
-						avancer();
-					else if ((int) json.get("arg") == -10)
-						//reculer();
-
-						if (paused)
-							jouer();
-					break;
-
-				case "vol":
-					if ((json.get("arg")).equals("+"))
-						monterVolume();
-					else if ((json.get("arg")).equals("-"))
-						baisserVolume();
-					else if ((json.get("arg")).equals("++"))
-						partyMode();
+			case "move":
+				if ((int) json.get("arg") == 10)
+					avancer();
+				else if ((int) json.get("arg") == -10)
+					//reculer();
 
 					if (paused)
 						jouer();
-					break;
+				break;
 
-				default:
-					Toast.makeText(getApplicationContext(),"Désolé je n'ai pas compris", Toast.LENGTH_SHORT).show();
-					if (paused)
-					{
-						jouer();
-						paused = false;
-					}
-					break;
-			}
+			case "vol":
+				if ((json.get("arg")).equals("+"))
+					monterVolume();
+				else if ((json.get("arg")).equals("-"))
+					baisserVolume();
 
-			texteCommande.setText(String.format("cmd : %s", action));
+				if (paused)
+					jouer();
+				break;
+
+			case "null":
+				break;
+
 		}
-
 	}
 }
