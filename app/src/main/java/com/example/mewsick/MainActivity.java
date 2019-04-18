@@ -26,7 +26,6 @@ import android.widget.Toast;
 
 import com.example.mewsick.Middleware.StreamingPrx;
 import com.jackandphantom.blurimage.BlurImage;
-import com.zeroc.IceInternal.Ex;
 
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -68,7 +67,13 @@ public class MainActivity extends Activity
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_pocket_sphinx);
 
-		connexion("192.168.0.4");
+		connexion("192.168.0.5", "12345");
+
+		if (streamer == null)
+			Toast.makeText(getApplicationContext(),"Le serveur de données ne répond pas !", Toast.LENGTH_LONG).show();
+
+		if (httpPostRequest("http://192.168.0.5:8080/server.php", "") == "")
+			Toast.makeText(getApplicationContext(),"Le serveur d'analyse ne répond pas !", Toast.LENGTH_LONG).show();
 
 		morceauActuel = R.raw.strawberry_girls_betelgeuse;
 		durationHandler = new Handler();
@@ -94,11 +99,11 @@ public class MainActivity extends Activity
 		});
 	}
 
-	private void connexion(String ip)
+	private void connexion(String ip, String port)
 	{
 		try(com.zeroc.Ice.Communicator communicator = com.zeroc.Ice.Util.initialize())
 		{
-			com.zeroc.Ice.ObjectPrx base = communicator.stringToProxy("ServeurStreaming:default -h " + ip + " -p 8080");
+			com.zeroc.Ice.ObjectPrx base = communicator.stringToProxy("ServeurStreaming:default -h " + ip + " -p " + port);
 			streamer = StreamingPrx.checkedCast(base);
 
 			if (streamer == null)
@@ -262,7 +267,12 @@ public class MainActivity extends Activity
 		if (jo.get("morceau") != null)
 			morceau = (String) jo.get("morceau");
 
+		streamer.rechercher(morceau, artiste, album);
+
+		//String url = m[0].localisation;
+
 		System.out.println("MORCEAU : " + artiste + " - " + morceau + " (" + album + ")");
+		//System.out.println("MORCEAU : " + url);
 	}
 
 	private void pause()

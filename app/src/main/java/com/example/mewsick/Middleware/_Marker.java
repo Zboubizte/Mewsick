@@ -15,9 +15,6 @@
 
 package com.example.mewsick.Middleware;
 
-/** @hidden */
-public class _StreamingPrxI extends com.zeroc.Ice._ObjectPrxI implements StreamingPrx
+interface _Marker
 {
-    /** @hidden */
-    public static final long serialVersionUID = 0L;
 }
