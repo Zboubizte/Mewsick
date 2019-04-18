@@ -24,7 +24,9 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.example.mewsick.Middleware.StreamingPrx;
 import com.jackandphantom.blurimage.BlurImage;
+import com.zeroc.IceInternal.Ex;
 
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -57,11 +59,16 @@ public class MainActivity extends Activity
 	private MediaMetadataRetriever mmr = null;
 	private Handler durationHandler = null;
 
+	private StreamingPrx streamer = null;
+	private int id = 0;
+
 	@Override
 	protected void onCreate(Bundle savedInstanceState)
 	{
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_pocket_sphinx);
+
+		connexion("192.168.0.4");
 
 		morceauActuel = R.raw.strawberry_girls_betelgeuse;
 		durationHandler = new Handler();
@@ -85,6 +92,24 @@ public class MainActivity extends Activity
 					stop();
 			}
 		});
+	}
+
+	private void connexion(String ip)
+	{
+		try(com.zeroc.Ice.Communicator communicator = com.zeroc.Ice.Util.initialize())
+		{
+			com.zeroc.Ice.ObjectPrx base = communicator.stringToProxy("ServeurStreaming:default -h " + ip + " -p 8080");
+			streamer = StreamingPrx.checkedCast(base);
+
+			if (streamer == null)
+				throw new Error("Invalid proxy");
+
+			id = streamer.abonnement();
+		}
+		catch (Exception e)
+		{
+			e.printStackTrace();
+		}
 	}
 
 	private void verifierPermissions()
@@ -226,12 +251,36 @@ public class MainActivity extends Activity
 		durationHandler.postDelayed(updateSeekBarTime, 100);
 	}
 
+	private void jouer(JSONObject jo)
+	{
+		String artiste = "", album = "", morceau = "";
+
+		if (jo.get("artiste") != null)
+			artiste = (String) jo.get("artiste");
+		if (jo.get("album") != null)
+			album = (String) jo.get("album");
+		if (jo.get("morceau") != null)
+			morceau = (String) jo.get("morceau");
+
+		System.out.println("MORCEAU : " + artiste + " - " + morceau + " (" + album + ")");
+	}
+
 	private void pause()
 	{
 		mp.pause();
 	}
 
 	private void next()
+	{
+		if (morceauActuel == R.raw.strawberry_girls_betelgeuse)
+			morceauActuel = R.raw.queen_dont_stop_me_now;
+		else
+			morceauActuel = R.raw.strawberry_girls_betelgeuse;
+
+		charger(morceauActuel);
+	}
+
+	private void pred()
 	{
 		if (morceauActuel == R.raw.strawberry_girls_betelgeuse)
 			morceauActuel = R.raw.queen_dont_stop_me_now;
@@ -266,12 +315,28 @@ public class MainActivity extends Activity
 		audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC), 0);
 	}
 
-	private void avancer()
+	private void bouger(int f)
 	{
-		if (mp.getCurrentPosition() + 10000 <= duree)
-			mp.seekTo(mp.getCurrentPosition() + 10000);
-		else
+		int temps = f * 1000;
+
+		if (mp.getCurrentPosition() + temps <= duree && mp.getCurrentPosition() + temps > 0)
+			mp.seekTo(mp.getCurrentPosition() + temps);
+		else if (mp.getCurrentPosition() + temps > duree)
 			mp.seekTo(duree);
+		else if (mp.getCurrentPosition() + temps <= 0)
+			mp.seekTo(0);
+	}
+
+	private void bougerA(int f)
+	{
+		int temps = Math.abs(f * 1000);
+
+		if (temps <= duree && temps > 0)
+			mp.seekTo(temps);
+		else if (temps > duree)
+			mp.seekTo(duree);
+		else if (temps <= 0)
+			mp.seekTo(0);
 	}
 
 	private Runnable updateSeekBarTime = new Runnable()
@@ -352,7 +417,10 @@ public class MainActivity extends Activity
 					break;
 
 				case "play":
-					jouer();
+					if (json.get("arg") != null)
+						jouer((JSONObject) json.get("arg"));
+					else
+						jouer();
 					break;
 
 				case "next":
@@ -360,14 +428,23 @@ public class MainActivity extends Activity
 					jouer();
 					break;
 
-				case "move":
-					if ((int) json.get("arg") == 10)
-						avancer();
-					else if ((int) json.get("arg") == -10)
-						//reculer();
+				case "pred":
+					pred();
+					jouer();
+					break;
 
-						if (paused)
-							jouer();
+				case "move":
+					if (json.get("arg") != null)
+						bouger(((Long) json.get("arg")).intValue());
+					if (paused)
+						jouer();
+					break;
+
+				case "moveto":
+					if (json.get("arg") != null)
+						bougerA(((Long) json.get("arg")).intValue());
+					if (paused)
+						jouer();
 					break;
 
 				case "vol":

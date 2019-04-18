@@ -6,7 +6,7 @@ android {
         renderscriptTargetApi 19
         renderscriptSupportModeEnabled true
         applicationId "com.example.mewsick"
-        minSdkVersion 23
+        minSdkVersion 24
         targetSdkVersion 28
         versionCode 1
         versionName "1.0"
@@ -18,9 +18,14 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+    compileOptions {
+        sourceCompatibility = '1.8'
+        targetCompatibility = '1.8'
+    }
 }
 
 dependencies {
+    implementation 'com.zeroc:ice:3.7.2'
     implementation 'com.jackandphantom.android:blurimage:1.2.0'
     implementation('com.googlecode.json-simple:json-simple:1.1.1') { exclude group: 'junit', module: 'junit' }
     implementation project(':pocketsphinx-android')
