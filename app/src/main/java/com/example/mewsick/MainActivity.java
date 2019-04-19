@@ -10,7 +10,6 @@ import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.AudioManager;
-import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.os.Handler;
@@ -24,6 +23,7 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.example.mewsick.Middleware.Morceau;
 import com.example.mewsick.Middleware.StreamingPrx;
 import com.jackandphantom.blurimage.BlurImage;
 
@@ -40,6 +40,8 @@ import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Locale;
 
+import wseemann.media.FFmpegMediaMetadataRetriever;
+
 public class MainActivity extends Activity
 {
 	private static final int PERMISSIONS_REQUEST_RECORD_AUDIO = 1;
@@ -55,7 +57,7 @@ public class MainActivity extends Activity
 
 	private AudioManager audioManager = null;
 	private MediaPlayer mp = null;
-	private MediaMetadataRetriever mmr = null;
+	private FFmpegMediaMetadataRetriever mmr = null;
 	private Handler durationHandler = null;
 
 	private StreamingPrx streamer = null;
@@ -101,8 +103,14 @@ public class MainActivity extends Activity
 
 	private void connexion(String ip, String port)
 	{
-		try(com.zeroc.Ice.Communicator communicator = com.zeroc.Ice.Util.initialize())
+		String [] tmp = new String[2];
+		tmp[0] = "Ice.Package.Middleware=com.example.mewsick";
+		tmp[1] = "Ice.Default.Package=com.example.mewsick";
+
+		try(com.zeroc.Ice.Communicator communicator = com.zeroc.Ice.Util.initialize(tmp))
 		{
+			communicator.getProperties().setProperty("Ice.Package.Middleware", "com.example.mewsick");
+			communicator.getProperties().setProperty("Ice.Default.Package", "com.example.mewsick");
 			com.zeroc.Ice.ObjectPrx base = communicator.stringToProxy("ServeurStreaming:default -h " + ip + " -p " + port);
 			streamer = StreamingPrx.checkedCast(base);
 
@@ -140,7 +148,7 @@ public class MainActivity extends Activity
 	private void initMedia()
 	{
 		audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-		mmr = new MediaMetadataRetriever();
+		mmr = new FFmpegMediaMetadataRetriever();
 	}
 
 	private void charger(int fichier)
@@ -153,9 +161,9 @@ public class MainActivity extends Activity
 		mp = MediaPlayer.create(this, fichier);
 		mmr.setDataSource(afd.getFileDescriptor(), afd.getStartOffset(), afd.getLength());
 
-		titre = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);
-		artiste = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST).toUpperCase();
-		album = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM).toUpperCase();
+		titre = mmr.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_TITLE);
+		artiste = mmr.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_ARTIST).toUpperCase();
+		album = mmr.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_ALBUM).toUpperCase();
 		duree = mp.getDuration();
 
 		byte[] data = mmr.getEmbeddedPicture();
@@ -170,6 +178,49 @@ public class MainActivity extends Activity
 		progress.setClickable(false);
 
 		blurBG();
+	}
+
+	private void charger(Morceau m)
+	{
+		if (mp != null)
+		{
+			mp.reset();
+			mp.release();
+			mp = null;
+		}
+
+		mmr.setDataSource(m.localisation);
+
+		titre = m.titre;
+		artiste = m.artiste;
+		album = m.album;
+
+		byte[] data = mmr.getEmbeddedPicture();
+		image = BitmapFactory.decodeByteArray(data, 0, data.length);
+
+		artisteAlbum.setText(String.format("%s - %s", artiste, album));
+		morceau.setText(titre);
+		albumArt.setImageBitmap(image);
+
+		blurBG();
+
+		try
+		{
+			mp = new MediaPlayer();
+			mp.setDataSource(m.localisation);
+			mp.prepare();
+		}
+		catch (Exception e)
+		{
+			e.printStackTrace();
+		}
+
+		duree = mp.getDuration();
+		tempsTotal.setText(String.format("%01d:%02d", (mp.getDuration() / 1000) / 60, (mp.getDuration() / 1000) % 60));
+		progress.setMax(mp.getDuration());
+		progress.setClickable(false);
+
+		mp.start();
 	}
 
 	private void blurBG()
@@ -267,12 +318,16 @@ public class MainActivity extends Activity
 		if (jo.get("morceau") != null)
 			morceau = (String) jo.get("morceau");
 
-		streamer.rechercher(morceau, artiste, album);
+		Morceau[] m = null;
+		m = streamer.rechercher(morceau, artiste, album);
 
-		//String url = m[0].localisation;
-
-		System.out.println("MORCEAU : " + artiste + " - " + morceau + " (" + album + ")");
-		//System.out.println("MORCEAU : " + url);
+		if (m.length > 0)
+		{
+			charger(m[0]);
+			mp.start();
+			progress.setProgress(mp.getCurrentPosition());
+			durationHandler.postDelayed(updateSeekBarTime, 100);
+		}
 	}
 
 	private void pause()
