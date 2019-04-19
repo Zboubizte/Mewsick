@@ -18,7 +18,6 @@ import android.os.StrictMode;
 import android.speech.RecognizerIntent;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
-import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.ImageView;
@@ -43,6 +42,7 @@ import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 import wseemann.media.FFmpegMediaMetadataRetriever;
 
@@ -51,7 +51,7 @@ public class MainActivity extends Activity
 	private static final int PERMISSIONS_REQUEST_RECORD_AUDIO = 1;
 	private boolean enEcoute = false, paused = false;
 
-	private TextView artisteAlbum, morceau, tempsActuel, tempsTotal, texteCommande;
+	private TextView artisteAlbum, morceau, tempsActuel, tempsTotal;
 	private ImageView albumArt, enregistrer;
 	private SeekBar progress;
 
@@ -66,6 +66,8 @@ public class MainActivity extends Activity
 
 	private StreamingPrx streamer = null;
 	private int id = 0;
+	private String ip = "192.168.0.5";
+	private String port = "12345";
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState)
@@ -73,14 +75,14 @@ public class MainActivity extends Activity
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_pocket_sphinx);
 
-		connexion("192.168.0.5", "12345");
+		connexion(ip, port);
 
 		if (streamer == null)
 			Toast.makeText(getApplicationContext(),"Le serveur de données ne répond pas !", Toast.LENGTH_LONG).show();
 
 		id = streamer.abonnement();
 
-		if (httpPostRequest("http://192.168.0.5:8080/server.php", "") == "")
+		if (httpPostRequest("http://192.168.0.5:8080/server.php", "").equals(""))
 			Toast.makeText(getApplicationContext(),"Le serveur d'analyse ne répond pas !", Toast.LENGTH_LONG).show();
 
 		durationHandler = new Handler();
@@ -94,16 +96,12 @@ public class MainActivity extends Activity
 		charger(streamer.afficherMorceaux()[0]);
 		pause();
 
-		enregistrer.setOnClickListener(new View.OnClickListener()
+		enregistrer.setOnClickListener(v ->
 		{
-			@Override
-			public void onClick(View v)
-			{
-				if (!enEcoute)
-					ecouter();
-				else
-					stop();
-			}
+			if (!enEcoute)
+				ecouter();
+			else
+				stop();
 		});
 	}
 
@@ -148,7 +146,6 @@ public class MainActivity extends Activity
 		albumArt = findViewById(R.id.albumArt);
 		enregistrer = findViewById(R.id.enregistrer);
 		progress = findViewById(R.id.progress);
-		texteCommande = findViewById(R.id.commande);
 	}
 
 	private void initMedia()
@@ -230,7 +227,7 @@ public class MainActivity extends Activity
 				.load(image)
 				.intensity(20)
 				.Async(true)
-				.into((ImageView) findViewById(R.id.backgroundImg));
+				.into(findViewById(R.id.backgroundImg));
 	}
 
 	private void stop()
@@ -278,7 +275,7 @@ public class MainActivity extends Activity
 
 			String commande = result.get(0);
 
-			String rep = httpPostRequest("http://192.168.0.5:8080/server.php", commande);
+			String rep = httpPostRequest("http://" + ip + ":8080/server.php", commande);
 
 			JSONParser parser = new JSONParser();
 			JSONObject json;
@@ -319,8 +316,7 @@ public class MainActivity extends Activity
 		if (jo.get("morceau") != null)
 			morceau = (String) jo.get("morceau");
 
-		Morceau[] m = null;
-		m = streamer.rechercher(morceau, artiste, album);
+		Morceau[] m = streamer.rechercher(morceau, artiste, album);
 
 		if (m.length > 0)
 		{
@@ -329,6 +325,8 @@ public class MainActivity extends Activity
 			progress.setProgress(mp.getCurrentPosition());
 			durationHandler.postDelayed(updateSeekBarTime, 100);
 		}
+		else
+			Toast.makeText(getApplicationContext(),"Je ne trouve pas ce morceau !", Toast.LENGTH_LONG).show();
 	}
 
 	private void pause()
@@ -357,7 +355,7 @@ public class MainActivity extends Activity
 	private void pred()
 	{
 		Morceau[] m = streamer.afficherMorceaux();
-		int pred = m.length;
+		int pred = m.length - 1;
 
 		for (int i = 0; i < m.length; i++)
 		{
@@ -413,12 +411,10 @@ public class MainActivity extends Activity
 	{
 		int temps = Math.abs(f * 1000);
 
-		if (temps <= duree && temps > 0)
+		if (temps <= duree && temps >= 0)
 			mp.seekTo(temps);
 		else if (temps > duree)
 			mp.seekTo(duree);
-		else if (temps <= 0)
-			mp.seekTo(0);
 	}
 
 	private Runnable updateSeekBarTime = new Runnable()
@@ -530,11 +526,11 @@ public class MainActivity extends Activity
 					break;
 
 				case "vol":
-					if ((json.get("arg")).equals("+"))
+					if (Objects.equals(json.get("arg"), "+"))
 						monterVolume();
-					else if ((json.get("arg")).equals("-"))
+					else if (Objects.equals(json.get("arg"), "-"))
 						baisserVolume();
-					else if ((json.get("arg")).equals("++"))
+					else if (Objects.equals(json.get("arg"), "++"))
 						partyMode();
 
 					if (paused)
@@ -550,8 +546,6 @@ public class MainActivity extends Activity
 					}
 					break;
 			}
-
-			texteCommande.setText(String.format("cmd : %s", action));
 		}
 
 	}

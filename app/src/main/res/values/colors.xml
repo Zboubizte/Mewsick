@@ -6,4 +6,5 @@
     <color name="colorAccent">#d50000</color>
     <color name="lightText">#FFFFFF</color>
     <color name="assombrir">#66000000</color>
+    <color name="noir">#000000</color>
 </resources>

@@ -1,3 +1,4 @@
+/*
 package com.example.mewsick;
 
 import android.Manifest;
@@ -355,7 +356,9 @@ public class PocketSphinx extends Activity implements RecognitionListener
 		paused = false;
 	}
 
-	/* https://stackoverflow.com/questions/38408121/how-to-send-http-post-request-from-android */
+	*/
+/* https://stackoverflow.com/questions/38408121/how-to-send-http-post-request-from-android *//*
+
 	public static String httpPostRequest(String url, String cmd)
 	{
 		String response = "";
@@ -454,4 +457,4 @@ public class PocketSphinx extends Activity implements RecognitionListener
 
 		}
 	}
-}
+}*/
