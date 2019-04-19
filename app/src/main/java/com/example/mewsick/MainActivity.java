@@ -6,9 +6,10 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Color;
+import android.graphics.PorterDuff;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.os.Bundle;
@@ -18,6 +19,8 @@ import android.speech.RecognizerIntent;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
 import android.widget.ImageView;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -38,6 +41,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 import wseemann.media.FFmpegMediaMetadataRetriever;
@@ -51,7 +55,7 @@ public class MainActivity extends Activity
 	private ImageView albumArt, enregistrer;
 	private SeekBar progress;
 
-	private int morceauActuel, duree, dureePassee;
+	private int duree, dureePassee;
 	private String titre, artiste, album;
 	private Bitmap image;
 
@@ -74,10 +78,11 @@ public class MainActivity extends Activity
 		if (streamer == null)
 			Toast.makeText(getApplicationContext(),"Le serveur de données ne répond pas !", Toast.LENGTH_LONG).show();
 
+		id = streamer.abonnement();
+
 		if (httpPostRequest("http://192.168.0.5:8080/server.php", "") == "")
 			Toast.makeText(getApplicationContext(),"Le serveur d'analyse ne répond pas !", Toast.LENGTH_LONG).show();
 
-		morceauActuel = R.raw.strawberry_girls_betelgeuse;
 		durationHandler = new Handler();
 
 		StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
@@ -86,7 +91,8 @@ public class MainActivity extends Activity
 		verifierPermissions();
 		lierInterface();
 		initMedia();
-		charger(morceauActuel);
+		charger(streamer.afficherMorceaux()[0]);
+		pause();
 
 		enregistrer.setOnClickListener(new View.OnClickListener()
 		{
@@ -151,33 +157,27 @@ public class MainActivity extends Activity
 		mmr = new FFmpegMediaMetadataRetriever();
 	}
 
-	private void charger(int fichier)
+	private void changerCouleurs()
 	{
-		if (mp != null)
-			mp.reset();
+		List<int[]> result = new ArrayList<>();
+		try
+		{
+			result = MMCQ.compute(image, 2);
+		}
+		catch (Exception e)
+		{
+			e.printStackTrace();
+		}
+		int[] dominant = result.get(0);
+		int[] accentuation = result.get(1);
 
-		final AssetFileDescriptor afd = getResources().openRawResourceFd(fichier);
+		Window window = this.getWindow();
+		window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+		window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+		window.setStatusBarColor(Color.rgb(accentuation[0], accentuation[1], accentuation[2]));
 
-		mp = MediaPlayer.create(this, fichier);
-		mmr.setDataSource(afd.getFileDescriptor(), afd.getStartOffset(), afd.getLength());
-
-		titre = mmr.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_TITLE);
-		artiste = mmr.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_ARTIST).toUpperCase();
-		album = mmr.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_ALBUM).toUpperCase();
-		duree = mp.getDuration();
-
-		byte[] data = mmr.getEmbeddedPicture();
-		image = BitmapFactory.decodeByteArray(data, 0, data.length);
-
-		artisteAlbum.setText(String.format("%s - %s", artiste, album));
-		morceau.setText(titre);
-		albumArt.setImageBitmap(image);
-		tempsTotal.setText(String.format("%01d:%02d", (mp.getDuration() / 1000) / 60, (mp.getDuration() / 1000) % 60));
-
-		progress.setMax(mp.getDuration());
-		progress.setClickable(false);
-
-		blurBG();
+		progress.getProgressDrawable().setColorFilter(Color.rgb(dominant[0], dominant[1], dominant[2]), PorterDuff.Mode.MULTIPLY);
+		progress.getThumb().setColorFilter(Color.rgb(dominant[0], dominant[1], dominant[2]), PorterDuff.Mode.SRC_IN);
 	}
 
 	private void charger(Morceau m)
@@ -191,9 +191,9 @@ public class MainActivity extends Activity
 
 		mmr.setDataSource(m.localisation);
 
-		titre = m.titre;
-		artiste = m.artiste;
-		album = m.album;
+		titre = mmr.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_TITLE);
+		artiste = mmr.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_ARTIST).toUpperCase();
+		album = mmr.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_ALBUM).toUpperCase();
 
 		byte[] data = mmr.getEmbeddedPicture();
 		image = BitmapFactory.decodeByteArray(data, 0, data.length);
@@ -202,6 +202,7 @@ public class MainActivity extends Activity
 		morceau.setText(titre);
 		albumArt.setImageBitmap(image);
 
+		changerCouleurs();
 		blurBG();
 
 		try
@@ -337,22 +338,38 @@ public class MainActivity extends Activity
 
 	private void next()
 	{
-		if (morceauActuel == R.raw.strawberry_girls_betelgeuse)
-			morceauActuel = R.raw.queen_dont_stop_me_now;
-		else
-			morceauActuel = R.raw.strawberry_girls_betelgeuse;
+		Morceau[] m = streamer.afficherMorceaux();
+		int next = 0;
 
-		charger(morceauActuel);
+		for (int i = 0; i < m.length; i++)
+		{
+			if (m[i].artiste.toLowerCase().equals(artiste.toLowerCase()) && m[i].titre.toLowerCase().equals(titre.toLowerCase()))
+			{
+				if (i != m.length - 1)
+					next = i + 1;
+				break;
+			}
+		}
+
+		charger(m[next]);
 	}
 
 	private void pred()
 	{
-		if (morceauActuel == R.raw.strawberry_girls_betelgeuse)
-			morceauActuel = R.raw.queen_dont_stop_me_now;
-		else
-			morceauActuel = R.raw.strawberry_girls_betelgeuse;
+		Morceau[] m = streamer.afficherMorceaux();
+		int pred = m.length;
 
-		charger(morceauActuel);
+		for (int i = 0; i < m.length; i++)
+		{
+			if (m[i].artiste.toLowerCase().equals(artiste.toLowerCase()) && m[i].titre.toLowerCase().equals(titre.toLowerCase()))
+			{
+				if (i != 0)
+					pred = i - 1;
+				break;
+			}
+		}
+
+		charger(m[pred]);
 	}
 
 	private void monterVolume()
