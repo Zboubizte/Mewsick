@@ -28,6 +28,7 @@ import android.widget.Toast;
 import com.example.mewsick.Middleware.Morceau;
 import com.example.mewsick.Middleware.StreamingPrx;
 import com.jackandphantom.blurimage.BlurImage;
+import com.zeroc.Ice.Communicator;
 
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -46,12 +47,14 @@ import java.util.Objects;
 
 import wseemann.media.FFmpegMediaMetadataRetriever;
 
+import static com.zeroc.Ice.Util.initialize;
+
 public class MainActivity extends Activity
 {
 	private static final int PERMISSIONS_REQUEST_RECORD_AUDIO = 1;
 	private boolean enEcoute = false, paused = false;
 
-	private TextView artisteAlbum, morceau, tempsActuel, tempsTotal;
+	private TextView artisteAlbum, morceau, tempsActuel, tempsTotal, pistes;
 	private ImageView albumArt, enregistrer;
 	private SeekBar progress;
 
@@ -65,9 +68,12 @@ public class MainActivity extends Activity
 	private Handler durationHandler = null;
 
 	private StreamingPrx streamer = null;
-	private int id = 0;
 	private String ip = "192.168.0.5";
 	private String port = "12345";
+	private Communicator communicator = null;
+
+	private Morceau[] playlist = null;
+	private int index = 0, indexMax = 0;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState)
@@ -75,25 +81,23 @@ public class MainActivity extends Activity
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_pocket_sphinx);
 
+		StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
+		StrictMode.setThreadPolicy(policy);
+
 		connexion(ip, port);
 
 		if (streamer == null)
 			Toast.makeText(getApplicationContext(),"Le serveur de données ne répond pas !", Toast.LENGTH_LONG).show();
-
-		id = streamer.abonnement();
 
 		if (httpPostRequest("http://192.168.0.5:8080/server.php", "").equals(""))
 			Toast.makeText(getApplicationContext(),"Le serveur d'analyse ne répond pas !", Toast.LENGTH_LONG).show();
 
 		durationHandler = new Handler();
 
-		StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
-		StrictMode.setThreadPolicy(policy);
-
 		verifierPermissions();
 		lierInterface();
 		initMedia();
-		charger(streamer.afficherMorceaux()[0]);
+		chargerPlaylist(streamer.getMorceaux());
 		pause();
 
 		enregistrer.setOnClickListener(v ->
@@ -107,12 +111,9 @@ public class MainActivity extends Activity
 
 	private void connexion(String ip, String port)
 	{
-		String [] tmp = new String[2];
-		tmp[0] = "Ice.Package.Middleware=com.example.mewsick";
-		tmp[1] = "Ice.Default.Package=com.example.mewsick";
-
-		try(com.zeroc.Ice.Communicator communicator = com.zeroc.Ice.Util.initialize(tmp))
+		try
 		{
+			communicator = initialize();
 			communicator.getProperties().setProperty("Ice.Package.Middleware", "com.example.mewsick");
 			communicator.getProperties().setProperty("Ice.Default.Package", "com.example.mewsick");
 			com.zeroc.Ice.ObjectPrx base = communicator.stringToProxy("ServeurStreaming:default -h " + ip + " -p " + port);
@@ -120,8 +121,6 @@ public class MainActivity extends Activity
 
 			if (streamer == null)
 				throw new Error("Invalid proxy");
-
-			id = streamer.abonnement();
 		}
 		catch (Exception e)
 		{
@@ -146,6 +145,7 @@ public class MainActivity extends Activity
 		albumArt = findViewById(R.id.albumArt);
 		enregistrer = findViewById(R.id.enregistrer);
 		progress = findViewById(R.id.progress);
+		pistes = findViewById(R.id.pistes);
 	}
 
 	private void initMedia()
@@ -177,16 +177,9 @@ public class MainActivity extends Activity
 		progress.getThumb().setColorFilter(Color.rgb(dominant[0], dominant[1], dominant[2]), PorterDuff.Mode.SRC_IN);
 	}
 
-	private void charger(Morceau m)
+	private void charger(int num)
 	{
-		if (mp != null)
-		{
-			mp.reset();
-			mp.release();
-			mp = null;
-		}
-
-		mmr.setDataSource(m.localisation);
+		mmr.setDataSource(playlist[num].localisation);
 
 		titre = mmr.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_TITLE);
 		artiste = mmr.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_ARTIST).toUpperCase();
@@ -205,7 +198,7 @@ public class MainActivity extends Activity
 		try
 		{
 			mp = new MediaPlayer();
-			mp.setDataSource(m.localisation);
+			mp.setDataSource(playlist[num].localisation);
 			mp.prepare();
 		}
 		catch (Exception e)
@@ -219,6 +212,23 @@ public class MainActivity extends Activity
 		progress.setClickable(false);
 
 		mp.start();
+	}
+
+	private void chargerPlaylist(Morceau [] m)
+	{
+		if (mp != null)
+		{
+			mp.reset();
+			mp.release();
+			mp = null;
+		}
+
+		playlist = null;
+		playlist = m;
+		index = 0;
+		indexMax = playlist.length;
+
+		charger(index);
 	}
 
 	private void blurBG()
@@ -320,7 +330,7 @@ public class MainActivity extends Activity
 
 		if (m.length > 0)
 		{
-			charger(m[0]);
+			chargerPlaylist(m);
 			mp.start();
 			progress.setProgress(mp.getCurrentPosition());
 			durationHandler.postDelayed(updateSeekBarTime, 100);
@@ -336,38 +346,22 @@ public class MainActivity extends Activity
 
 	private void next()
 	{
-		Morceau[] m = streamer.afficherMorceaux();
-		int next = 0;
+		if (index + 1 < indexMax)
+			index++;
+		else
+			index = 0;
 
-		for (int i = 0; i < m.length; i++)
-		{
-			if (m[i].artiste.toLowerCase().equals(artiste.toLowerCase()) && m[i].titre.toLowerCase().equals(titre.toLowerCase()))
-			{
-				if (i != m.length - 1)
-					next = i + 1;
-				break;
-			}
-		}
-
-		charger(m[next]);
+		charger(index);
 	}
 
 	private void pred()
 	{
-		Morceau[] m = streamer.afficherMorceaux();
-		int pred = m.length - 1;
+		if (index - 1 >= 0)
+			index--;
+		else
+			index = indexMax - 1;
 
-		for (int i = 0; i < m.length; i++)
-		{
-			if (m[i].artiste.toLowerCase().equals(artiste.toLowerCase()) && m[i].titre.toLowerCase().equals(titre.toLowerCase()))
-			{
-				if (i != 0)
-					pred = i - 1;
-				break;
-			}
-		}
-
-		charger(m[pred]);
+		charger(index);
 	}
 
 	private void monterVolume()

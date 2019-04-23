@@ -33,7 +33,7 @@
         app:layout_constraintHorizontal_bias="0.498"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_bias="0.943" />
+        app:layout_constraintVertical_bias="0.941" />
 
     <ImageView
         android:id="@+id/albumArt"
@@ -147,5 +147,20 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="@+id/albumArt" />
+
+    <TextView
+        android:id="@+id/pistes"
+        android:layout_width="wrap_content"
+        android:layout_height="19dp"
+        android:layout_marginTop="5dp"
+        android:layout_marginBottom="16dp"
+        android:fontFamily="sans-serif-light"
+        android:text="1/1"
+        android:textAlignment="center"
+        android:textColor="@color/lightText"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/enregistrer" />
 
 </android.support.constraint.ConstraintLayout>
