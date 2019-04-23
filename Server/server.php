@@ -4,81 +4,79 @@ if (isset($_POST['cmd']))
 {
 	$commande = $_POST['cmd'];
 	$rep = array();
-	$coupe = explode(' ', trim($commande));
+	$tab = explode(' ', trim($commande));
 
 	error_log($commande);
 
 	//*************//
 	//*** PAUSE ***//
 	//*************//
-	if (strpos($coupe[0], "pause") !== false OR
-		strpos($coupe[0], "stop") !== false OR 
-			(count($coupe) == 3 AND 
-			 strpos($coupe[0], "met") !== false AND
-			 strpos($coupe[1], "en") !== false AND
-			 strpos($coupe[2], "pause") !== false))
+	if (comp($tab[0], "pause") OR
+		comp($tab[0], "stop") OR 
+			(count($tab) == 3 AND 
+			 comp($tab[0], "met") AND
+			 comp($tab[1], "en") AND
+			 comp($tab[2], "pause")))
 	{
 		$rep['cmd'] = "stop";
 	}
 	//************//
 	//*** PLAY ***//
 	//************//
-	else if (strpos($coupe[0], "joue") !== false OR
-			 strpos($coupe[0], "reprendre") !== false OR
-			 strpos($coupe[0], "écoute") !== false)
+	else if (comp($tab[0], "joue") OR
+			 comp($tab[0], "reprendre") OR
+			 comp($tab[0], "écoute"))
 	{
 		$rep['cmd'] = "play";
 
-		if (count($coupe) > 1 AND
-				(strpos($coupe[0], "joue") !== false OR
-				strpos($coupe[0], "écoute") !== false))
+		if (count($tab) > 1 AND
+				(comp($tab[0], "joue") OR
+				comp($tab[0], "écoute")))
 		{
-			if (count($coupe) > 3 AND
-			  ((strpos($coupe[1], "le") !== false AND
-				strpos($coupe[2], "morceau") !== false) OR
-			   (strpos($coupe[1], "la") !== false AND
-				strpos($coupe[2], "chanson") !== false)))
+			if (count($tab) > 3 AND
+			  ((comp($tab[1], "le") AND
+				comp($tab[2], "morceau")) OR
+			   (comp($tab[1], "la") AND
+				comp($tab[2], "chanson"))))
 			{
 				$rep['arg']['artiste'] = "";
 				$rep['arg']['album'] = "";
-				$rep['arg']['morceau'] = getString($coupe, 2);
+				$rep['arg']['morceau'] = getString($tab, 2);
 			}
-			else if (count($coupe) > 2 AND
-					 strpos($coupe[1], "l'album") !== false OR
-					 strpos($coupe[1], "lalbum") !== false)
+			else if (count($tab) > 2 AND
+					 comp($tab[1], "l'album") OR
+					 comp($tab[1], "lalbum"))
 			{
-				$rep['arg']['artiste'] = "";
-				$rep['arg']['album'] = getString($coupe, 1);
-				$rep['arg']['morceau'] = "";
+				$rep['arg'] = analyserAlbum($tab);
 			}
-			else if (count($coupe) > 2 AND
-					 strpos($coupe[1], "l'artiste") !== false OR
-					 strpos($coupe[1], "lartiste") !== false)
+			else if (count($tab) > 2 AND
+					 comp($tab[1], "l'artiste") OR
+					 comp($tab[1], "lartiste"))
 			{
-				$rep['arg']['artiste'] = getString($coupe, 1);
+				$rep['arg']['artiste'] = getString($tab, 1);
 				$rep['arg']['album'] = "";
 				$rep['arg']['morceau'] = "";
 			}
 			else
 			{
-				$rep['arg'] = analyser($coupe);
+				$rep['arg'] = analyser($tab);
 			}
 		}
 	}
 	//************//
 	//*** NEXT ***//
 	//************//
-	else if (strpos($commande, "suivant") !== false)
+	else if (comp($commande, "suivant"))
 	{
-		if (count($coupe) == 1 AND
-			strpos($coupe[0], "suivant") !== false)
+		if (count($tab) == 1 AND
+			comp($tab[0], "suivant"))
 		{
 			$rep['cmd'] = "next";
 		}
-		else if (count($coupe) == 2 AND
-				 strpos($coupe[1], "suivant") !== false AND
-				 	(strpos($coupe[0], "morceau") !== false OR
-				 	 strpos($coupe[0], "chanson") !== false))
+		else if (count($tab) == 2 AND
+				 comp($tab[1], "suivant") AND
+				 	(comp($tab[0], "morceau") OR
+				 	 comp($tab[0], "chanson")))
 		{
 			$rep['cmd'] = "next";
 		}
@@ -90,17 +88,17 @@ if (isset($_POST['cmd']))
 	//************//
 	//*** PRED ***//
 	//************//
-	else if (strpos($commande, "précédent") !== false)
+	else if (comp($commande, "précédent"))
 	{
-		if (count($coupe) == 1 AND
-			strpos($coupe[0], "précédent") !== false)
+		if (count($tab) == 1 AND
+			comp($tab[0], "précédent"))
 		{
 			$rep['cmd'] = "pred";
 		}
-		else if (count($coupe) == 2 AND
-				 strpos($coupe[1], "précédent") !== false AND
-				 	(strpos($coupe[0], "morceau") !== false OR
-				 	 strpos($coupe[0], "chanson") !== false))
+		else if (count($tab) == 2 AND
+				 comp($tab[1], "précédent") AND
+				 	(comp($tab[0], "morceau") OR
+				 	 comp($tab[0], "chanson")))
 		{
 			$rep['cmd'] = "pred";
 		}
@@ -112,39 +110,39 @@ if (isset($_POST['cmd']))
 	//************//
 	//*** MOVE ***//
 	//************//
-	else if (strpos($coupe[0], "avancer") !== false OR
-			 strpos($coupe[0], "revenir") !== false OR
-			 strpos($coupe[0], "reculer") !== false OR
-			 strpos($coupe[0], "aller") !== false)
+	else if (comp($tab[0], "avancer") OR
+			 comp($tab[0], "revenir") OR
+			 comp($tab[0], "reculer") OR
+			 comp($tab[0], "aller"))
 	{
 		$continuer = true;
 
-		if (count($coupe) == 1)
+		if (count($tab) == 1)
 		{
-			if (strpos($coupe[0], "avancer") !== false)
+			if (comp($tab[0], "avancer"))
 			{
 				$rep['cmd'] = "move";
 				$rep['arg'] = 10;
 			}
-			else if (strpos($coupe[0], "revenir") !== false OR
-					 strpos($coupe[0], "reculer") !== false)
+			else if (comp($tab[0], "revenir") OR
+					 comp($tab[0], "reculer"))
 			{
 				$rep['cmd'] = "move";
 				$rep['arg'] = -10;
 			}
 		}
-		else if (count($coupe) >= 3)
+		else if (count($tab) >= 3)
 		{
-			if (strpos($coupe[1], "à") !== false)
+			if (comp($tab[1], "à"))
 			{
 				$rep['cmd'] = "moveto";
 			}
-			else if (strpos($coupe[1], "de") !== false)
+			else if (comp($tab[1], "de"))
 			{
 				$rep['cmd'] = "move";
 			}
-			else if (strpos($coupe[1], "au") !== false AND
-					 strpos($coupe[2], "début") !== false)
+			else if (comp($tab[1], "au") AND
+					 comp($tab[2], "début"))
 			{
 				$rep['cmd'] = "moveto";
 				$rep['arg'] = 0;
@@ -157,30 +155,30 @@ if (isset($_POST['cmd']))
 
 			if ($continuer == true)
 			{
-				$rep['arg'] = toDuree($coupe);
+				$rep['arg'] = toDuree($tab);
 			}
 
 				if ($rep['cmd'] == "move" AND 
-						(strpos($coupe[0], "revenir") !== false OR
-						 strpos($coupe[0], "reculer") !== false))
+						(comp($tab[0], "revenir") OR
+						 comp($tab[0], "reculer")))
 					$rep['arg'] = - $rep['arg'];
 		}
 	}
 	//**************//
 	//*** VOLUME ***//
 	//**************//
-	else if (strpos($commande, "volume") !== false OR
-			 strpos($commande, "son") !== false)
+	else if (comp($commande, "volume") OR
+			 comp($commande, "son"))
 	{
 		$rep['cmd'] = "vol";
 
-		if (strpos($coupe[0], "monte") !== false AND
-			strpos($coupe[1], "le") !== false)
+		if (comp($tab[0], "monte") AND
+			comp($tab[1], "le"))
 		{
 			$rep['arg'] = "+";
 		}
-		else if (strpos($coupe[0], "baisse") !== false AND
-				 strpos($coupe[1], "le") !== false)
+		else if (comp($tab[0], "baisse") AND
+				 comp($tab[1], "le"))
 		{
 			$rep['arg'] = "-";
 		}
@@ -189,7 +187,7 @@ if (isset($_POST['cmd']))
 			$rep['arg'] = "null";
 		}
 	}
-	else if (strpos($commande, "fête") !== false)
+	else if (comp($commande, "fête"))
 	{
 		$rep['cmd'] = "vol";
 		$rep['arg'] = "++";
@@ -198,6 +196,72 @@ if (isset($_POST['cmd']))
 		$rep['cmd'] = "null";
 
 	echo json_encode($rep);
+}
+
+function analyserAlbum($tab)
+{
+	array_shift($tab);
+	array_shift($tab);
+	
+	$rep = array();
+
+	$decount = 0;
+
+	for ($i = 0; $i < count($tab); $i++)
+	{
+		if ($tab[$i] == "de")
+		{
+			if ($i + 1 < count($tab) AND $tab[$i + 1] == "l'artiste")
+			{
+				$tab[$i] = "dlartiste";
+				unset($tab[$i + 1]);
+				$tab = array_values($tab);
+				$decount++;
+			}
+
+			if ($tab[$i] == "de")
+			{
+				if ($decount == 0)
+					$tab[$i] = "dlartiste";
+				else if ($decount == 1)
+					$tab[$i] = "dlalbum";
+
+				$decount++;
+			}
+		}
+	}
+
+	$type = 0;
+
+	$rep['morceau'] = "";
+	$rep['artiste'] = "";
+	$rep['album'] = "";
+
+	for ($i = 0; $i < count($tab); $i++)
+	{
+		if ($tab[$i] == "dlartiste")
+		{
+			$type = 1;
+			$i++;
+		}
+
+		if ($type == 0)
+		{
+			if ($rep['album'] != "")
+				$rep['album'] .= " ";
+
+			$rep['album'] .= $tab[$i];
+		}
+		else if ($type == 1)
+		{
+			if ($rep['artiste'] != "")
+				$rep['artiste'] .= " ";
+
+			$rep['artiste'] .= $tab[$i];
+		}
+	}
+
+	return $rep;
 }
 
 function analyser($tab)
@@ -324,9 +388,9 @@ function toDuree($tab)
 
 		if (count($tab) >= 2)
 		{
-			if (strpos($tab[1], "minute") !== false)
+			if (comp($tab[1], "minute"))
 				$mult = 60;
-			else if (strpos($tab[1], "seconde") !== false)
+			else if (comp($tab[1], "seconde"))
 				$mult = 1;
 
 			$val *= $mult;
@@ -339,6 +403,11 @@ function toDuree($tab)
 	}
 
 	return $val;
+}
+
+function comp($a, $b)
+{
+	return strpos($a, $b) !== false;
 }
 
 ?>

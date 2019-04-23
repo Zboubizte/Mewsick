@@ -79,7 +79,7 @@ public class MainActivity extends Activity
 	protected void onCreate(Bundle savedInstanceState)
 	{
 		super.onCreate(savedInstanceState);
-		setContentView(R.layout.activity_pocket_sphinx);
+		setContentView(R.layout.activity_main);
 
 		StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
 		StrictMode.setThreadPolicy(policy);
@@ -179,6 +179,13 @@ public class MainActivity extends Activity
 
 	private void charger(int num)
 	{
+		if (mp != null)
+		{
+			mp.reset();
+			mp.release();
+			mp = null;
+		}
+
 		mmr.setDataSource(playlist[num].localisation);
 
 		titre = mmr.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_TITLE);
@@ -210,19 +217,19 @@ public class MainActivity extends Activity
 		tempsTotal.setText(String.format("%01d:%02d", (mp.getDuration() / 1000) / 60, (mp.getDuration() / 1000) % 60));
 		progress.setMax(mp.getDuration());
 		progress.setClickable(false);
+		pistes.setText(String.format("%d/%d", index + 1, indexMax));
 
 		mp.start();
+
+		mp.setOnCompletionListener(mp ->
+		{
+			next();
+			jouer();
+		});
 	}
 
 	private void chargerPlaylist(Morceau [] m)
 	{
-		if (mp != null)
-		{
-			mp.reset();
-			mp.release();
-			mp = null;
-		}
-
 		playlist = null;
 		playlist = m;
 		index = 0;
@@ -234,10 +241,10 @@ public class MainActivity extends Activity
 	private void blurBG()
 	{
 		BlurImage.with(getApplicationContext())
-				.load(image)
-				.intensity(20)
-				.Async(true)
-				.into(findViewById(R.id.backgroundImg));
+				 .load(image)
+				 .intensity(20)
+				 .Async(true)
+				 .into(findViewById(R.id.backgroundImg));
 	}
 
 	private void stop()
@@ -310,6 +317,7 @@ public class MainActivity extends Activity
 
 	private void jouer()
 	{
+		paused = false;
 		mp.start();
 		progress.setProgress(mp.getCurrentPosition());
 		durationHandler.postDelayed(updateSeekBarTime, 100);
@@ -493,6 +501,7 @@ public class MainActivity extends Activity
 						jouer((JSONObject) json.get("arg"));
 					else
 						jouer();
+
 					break;
 
 				case "next":
@@ -508,15 +517,19 @@ public class MainActivity extends Activity
 				case "move":
 					if (json.get("arg") != null)
 						bouger(((Long) json.get("arg")).intValue());
+
 					if (paused)
 						jouer();
+
 					break;
 
 				case "moveto":
 					if (json.get("arg") != null)
 						bougerA(((Long) json.get("arg")).intValue());
+
 					if (paused)
 						jouer();
+
 					break;
 
 				case "vol":
@@ -529,18 +542,17 @@ public class MainActivity extends Activity
 
 					if (paused)
 						jouer();
+
 					break;
 
 				default:
 					Toast.makeText(getApplicationContext(),"Désolé je n'ai pas compris", Toast.LENGTH_SHORT).show();
+
 					if (paused)
-					{
 						jouer();
-						paused = false;
-					}
+
 					break;
 			}
 		}
-
 	}
 }
