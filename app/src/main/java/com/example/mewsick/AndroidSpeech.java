@@ -291,6 +291,7 @@ public class AndroidSpeech extends Activity
 			ArrayList<String> result = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
 
 			String commande = result.get(0);
+			System.out.println("J'ai compris : " + commande);
 
 			String rep = httpPostRequest("http://" + ip + ":8080/server.php", commande);
 
