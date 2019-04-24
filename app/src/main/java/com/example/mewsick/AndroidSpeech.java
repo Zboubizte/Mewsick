@@ -49,7 +49,7 @@ import wseemann.media.FFmpegMediaMetadataRetriever;
 
 import static com.zeroc.Ice.Util.initialize;
 
-public class MainActivity extends Activity
+public class AndroidSpeech extends Activity
 {
 	private static final int PERMISSIONS_REQUEST_RECORD_AUDIO = 1;
 	private boolean enEcoute = false, paused = false;
@@ -79,7 +79,7 @@ public class MainActivity extends Activity
 	protected void onCreate(Bundle savedInstanceState)
 	{
 		super.onCreate(savedInstanceState);
-		setContentView(R.layout.activity_main);
+		setContentView(R.layout.activity_lecteur);
 
 		StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
 		StrictMode.setThreadPolicy(policy);
